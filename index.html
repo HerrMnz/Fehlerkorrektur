@@ -1,0 +1,471 @@
+<!doctype html>
+<html lang="de">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Das O1-Spiel (aka Fehlerkorrektur mit Paritätsbits)</title>
+    <style>
+        :root {
+            --blue-dark: #0b3a66;
+            --cell-size: 56px;
+            --gap: 8px;
+            --bg: #f5f7fb;
+            --text: #0b3a66;
+            --green: #28a745;
+            --red: #d9534f;
+        }
+
+        * {
+            box-sizing: border-box
+        }
+
+        html, body {
+            height: 100%;
+            margin: 0;
+            font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+            background: var(--bg);
+            color: var(--text);
+            position: relative;
+        }
+
+        .page {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 28px;
+            gap: 32px;
+        }
+
+        .panel {
+            display: flex;
+            gap: 28px;
+            width: 100%;
+            max-width: 1100px;
+            align-items: flex-start;
+        }
+
+        .left {
+            width: 320px;
+            min-height: 380px;
+            background: linear-gradient(180deg, rgba(255,255,255,0.9), rgba(255,255,255,0.8));
+            border-radius: 12px;
+            padding: 18px;
+            box-shadow: 0 6px 18px rgba(11,58,102,0.08);
+            border: 1px solid rgba(11,58,102,0.06);
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+            .left h3 {
+                margin: 0 0 6px 0
+            }
+
+            .left p {
+                margin: 0;
+                color: #33475b
+            }
+
+        .main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 18px;
+        }
+
+        h1 {
+            margin: 0 0 6px 0;
+            font-size: 20px;
+            color: var(--blue-dark);
+            text-align: center;
+        }
+
+        .subtitle {
+            color: #2e4a66;
+            font-size: 13px;
+            margin-bottom: 6px
+        }
+
+        .table-wrap {
+            background: linear-gradient(180deg,#ffffff, #fbfdff);
+            padding: 18px;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(11,58,102,0.06);
+            border: 1px solid rgba(11,58,102,0.05);
+        }
+
+        table.grid {
+            border-collapse: separate;
+            border-spacing: var(--gap);
+            margin: 0 auto;
+        }
+
+            table.grid td {
+                background: transparent;
+            }
+
+        .cell {
+            width: var(--cell-size);
+            height: var(--cell-size);
+            display: inline-grid;
+            place-items: center;
+            border-radius: 8px;
+            border: none;
+            cursor: pointer;
+            font-weight: 700;
+            font-size: 18px;
+            background: white;
+            color: var(--blue-dark);
+            box-shadow: 0 2px 6px rgba(11,58,102,0.06);
+            transition: background-color 180ms ease, color 180ms ease, transform 80ms ease, border 200ms ease;
+            user-select: none;
+        }
+
+            .cell:active {
+                transform: scale(0.98)
+            }
+
+            .cell.active {
+                background: var(--blue-dark);
+                color: white;
+                box-shadow: 0 6px 18px rgba(11,58,102,0.15);
+            }
+
+            .cell.changed {
+                border: 3px solid var(--green);
+            }
+
+            .cell.hoverable:hover {
+                box-shadow: 0 0 12px var(--blue-dark);
+                transform: scale(1.05);
+            }
+
+        .input-cell {
+            width: var(--cell-size);
+            height: var(--cell-size);
+            border-radius: 8px;
+            border: 1px solid rgba(11,58,102,0.2);
+            font-size: 18px;
+            font-weight: 700;
+            text-align: center;
+            background: white;
+            color: var(--blue-dark);
+            transition: background-color 180ms ease, color 180ms ease;
+        }
+
+            .input-cell.active {
+                background: var(--blue-dark);
+                color: white;
+            }
+
+        .controls {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            margin-top: 6px;
+        }
+
+        .btn {
+            padding: 10px 14px;
+            border-radius: 10px;
+            border: 1px solid rgba(11,58,102,0.12);
+            background: white;
+            cursor: pointer;
+            font-weight: 600;
+            box-shadow: 0 6px 18px rgba(11,58,102,0.04);
+        }
+
+            .btn.primary {
+                background: var(--blue-dark);
+                color: white;
+                border-color: transparent;
+            }
+
+            .btn:disabled {
+                opacity: 0.5;
+                cursor: not-allowed;
+            }
+
+        .toast {
+            position: fixed;
+            bottom: 24px;
+            left: 24px;
+            min-width: 220px;
+            max-width: 90%;
+            padding: 14px 18px;
+            border-radius: 10px;
+            color: white;
+            font-weight: 700;
+            text-align: left;
+            box-shadow: 0 6px 20px rgba(0,0,0,0.2);
+            opacity: 0;
+            pointer-events: none;
+            transform: translateX(-30px) scale(0.95);
+            transition: opacity 0.4s ease, transform 0.4s ease;
+            z-index: 1000;
+            line-height: 1.3;
+            white-space: pre-wrap;
+        }
+
+            .toast.show {
+                opacity: 1;
+                transform: translateX(0) scale(1);
+            }
+
+            .toast.green.persistent {
+                background: var(--green);
+                opacity: 1 !important;
+                pointer-events: auto;
+            }
+
+            .toast.red {
+                background: var(--red);
+                max-width: 300px;
+                word-break: break-word;
+                white-space: pre-line;
+            }
+
+        footer {
+            position: fixed;
+            bottom: 12px;
+            right: 16px;
+            font-size: 12px;
+            color: rgba(11,58,102,0.5);
+        }
+
+        @media (max-width:900px) {
+            .panel {
+                flex-direction: column;
+                align-items: stretch
+            }
+
+            .left {
+                width: 100%;
+                order: 2
+            }
+
+            .main {
+                order: 1
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="page">
+        <div class="panel">
+            <aside class="left" aria-labelledby="erkl">
+                <h3 id="erkl">Anleitung</h3>
+                <p id="instruction-text">Person A erstellt durch Anklicken ein beliebiges Muster aus Nullen und Einsen in der Tabelle und drückt dann Weiter. Tipp: je zufälliger das Muster ist, desto besser. Wenn es für Person B noch schwieriger werden soll, schaut Person B dabei weg oder macht die Augen zu.</p>
+            </aside>
+            <main class="main">
+                <div style="text-align:center">
+                    <h1>Das O1-Spiel (aka Fehlerkorrektur mit Paritätsbits)</h1>
+                    <div class="subtitle">Entscheidet, wer Person A und wer Person B sein soll und befolgt dann die Anweisungen im linken Kasten.</div>
+                </div>
+                <div class="table-wrap" role="application" aria-label="Raster">
+                    <table class="grid" id="grid" aria-hidden="false" role="grid"></table>
+                </div>
+                <div class="controls">
+                    <button class="btn primary" id="weiter">Weiter</button>
+                    <button class="btn primary" id="restart" style="display:none">Neu starten</button>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <footer>© Herr Manz</footer>
+    <div id="toast" class="toast"></div>
+
+    <script>
+        (function () {
+            let stage = 1;
+            const grid = document.getElementById('grid');
+            const instructionText = document.getElementById('instruction-text');
+            const weiterBtn = document.getElementById('weiter');
+            const restartBtn = document.getElementById('restart');
+            const toast = document.getElementById('toast');
+
+            function showToast(message, color, persist = false) {
+                toast.textContent = message;
+                if (persist) {
+                    toast.className = 'toast green persistent';
+                } else {
+                    toast.className = 'toast show red';
+                    setTimeout(() => {
+                        if (!toast.classList.contains('persistent')) {
+                            toast.className = 'toast';
+                        }
+                    }, 3000);
+                }
+            }
+
+            function buildStage1() {
+                grid.innerHTML = '';
+                weiterBtn.style.display = 'inline-block';
+                for (let r = 0; r < 6; r++) {
+                    const tr = document.createElement('tr');
+                    for (let c = 0; c < 6; c++) {
+                        const td = document.createElement('td');
+                        const btn = document.createElement('button');
+                        btn.className = 'cell'; btn.type = 'button'; btn.textContent = '0';
+                        btn.addEventListener('click', () => { btn.classList.toggle('active'); btn.textContent = btn.classList.contains('active') ? '1' : '0'; });
+                        td.appendChild(btn); tr.appendChild(td);
+                    }
+                    grid.appendChild(tr);
+                }
+                restartBtn.style.display = 'none';
+            }
+
+            function buildStage2(saved) {
+                grid.innerHTML = '';
+                weiterBtn.style.display = 'inline-block';
+                for (let r = 0; r < 7; r++) {
+                    const tr = document.createElement('tr');
+                    for (let c = 0; c < 7; c++) {
+                        const td = document.createElement('td');
+                        if (r < 6 && c < 6) {
+                            const span = document.createElement('span');
+                            span.className = 'cell'; span.textContent = saved[r][c];
+                            if (saved[r][c] === '1') span.classList.add('active');
+                            span.style.cursor = 'default'; td.appendChild(span);
+                        } else {
+                            const input = document.createElement('input');
+                            input.type = 'text'; input.maxLength = 1; input.className = 'input-cell';
+                            input.addEventListener('input', () => {
+                                input.value = input.value.replace(/[^01]/g, '');
+                                input.classList.toggle('active', input.value === '1');
+                                checkFilled();
+                            });
+                            td.appendChild(input);
+                        }
+                        tr.appendChild(td);
+                    }
+                    grid.appendChild(tr);
+                }
+                weiterBtn.disabled = true;
+                restartBtn.style.display = 'none';
+            }
+
+            function buildStage3(saved) {
+                grid.innerHTML = '';
+                weiterBtn.disabled = true; // <-- Hier deaktiviert
+                let changedCell = null;
+                for (let r = 0; r < 7; r++) {
+                    const tr = document.createElement('tr');
+                    for (let c = 0; c < 7; c++) {
+                        const td = document.createElement('td');
+                        const btn = document.createElement('button');
+                        btn.className = 'cell'; btn.textContent = saved[r][c];
+                        if (saved[r][c] === '1') btn.classList.add('active');
+                        btn.dataset.original = saved[r][c];
+                        btn.addEventListener('click', () => {
+                            if (changedCell && changedCell !== btn) {
+                                changedCell.textContent = changedCell.dataset.original;
+                                changedCell.classList.toggle('active', changedCell.textContent === '1');
+                                changedCell.classList.remove('changed');
+                            }
+                            btn.textContent = btn.textContent === btn.dataset.original ? (btn.textContent === '0' ? '1' : '0') : btn.textContent;
+                            btn.classList.toggle('active', btn.textContent === '1');
+                            btn.classList.add('changed');
+                            changedCell = btn;
+                            weiterBtn.disabled = false; // <-- aktivieren nach Klick
+                        });
+                        td.appendChild(btn); tr.appendChild(td);
+                    }
+                    grid.appendChild(tr);
+                }
+                restartBtn.style.display = 'none';
+            }
+
+            function buildStage4(saved, changedPos) {
+                grid.innerHTML = '';
+                weiterBtn.style.display = 'none';
+                for (let r = 0; r < 7; r++) {
+                    const tr = document.createElement('tr');
+                    for (let c = 0; c < 7; c++) {
+                        const td = document.createElement('td');
+                        const span = document.createElement('span');
+                        span.className = 'cell hoverable'; span.textContent = saved[r][c];
+                        if (saved[r][c] === '1') span.classList.add('active');
+                        span.addEventListener('click', () => {
+                            let correct = changedPos && changedPos.r === r && changedPos.c === c;
+                            if (correct) {
+                                span.textContent = span.textContent === '0' ? '1' : '0';
+                                span.classList.toggle('active', span.textContent === '1');
+                                span.classList.add('changed');
+                                showToast("Super! Du hast den Fehler gefunden und korrigiert!", 'green', true);
+                                document.querySelectorAll('.cell.hoverable').forEach(c => c.style.pointerEvents = 'none');
+                            } else {
+                                showToast("Leider falsch!\nEntweder du hast jetzt oder schon vorhin in Phase 2 einen Fehler gemacht. Versuchs noch einmal!", 'red', false);
+                            }
+                            restartBtn.style.display = 'inline-block';
+                        });
+                        td.appendChild(span); tr.appendChild(td);
+                    }
+                    grid.appendChild(tr);
+                }
+            }
+
+            function checkFilled() {
+                const inputs = document.querySelectorAll('.input-cell');
+                let allFilled = true;
+                inputs.forEach(inp => { if (inp.value !== '0' && inp.value !== '1') { allFilled = false; } });
+                weiterBtn.disabled = !allFilled;
+            }
+
+            restartBtn.addEventListener('click', () => {
+                stage = 1;
+                instructionText.textContent = "Person A erstellt durch Anklicken ein beliebiges Muster aus Nullen und Einsen in der Tabelle und drückt dann Weiter. Tipp: je zufälliger das Muster ist, desto besser. Wenn es für Person B noch schwieriger werden soll, schaut Person B dabei weg oder macht die Augen zu.";
+                toast.className = 'toast';
+                toast.textContent = '';
+                buildStage1();
+            });
+
+            weiterBtn.addEventListener('click', () => {
+                if (stage === 1) {
+                    const saved = [];
+                    document.querySelectorAll('.cell').forEach((btn, i) => {
+                        const r = Math.floor(i / 6); const c = i % 6;
+                        if (!saved[r]) saved[r] = [];
+                        saved[r][c] = btn.textContent;
+                    });
+                    stage = 2;
+                    instructionText.textContent = "Person B verteilt jetzt in den neuen Feldern Nullen und Einsen, so wie es ihr/ihm sinnvoll erscheint.";
+                    buildStage2(saved);
+                } else if (stage === 2) {
+                    const saved = [];
+                    const rows = grid.querySelectorAll('tr');
+                    for (let r = 0; r < 7; r++) {
+                        saved[r] = [];
+                        const cells = rows[r].querySelectorAll('td');
+                        for (let c = 0; c < 7; c++) {
+                            const el = cells[c].firstChild;
+                            saved[r][c] = el.value || el.textContent || '0';
+                        }
+                    }
+                    stage = 3;
+                    instructionText.textContent = "Person B muss jetzt weggucken! Person A darf heimlich eine (nur eine!) Zelle ändern. Dann klickt Person A schnell auf Weiter und erst danach darf Person B wieder hingucken.";
+                    buildStage3(saved);
+                } else if (stage === 3) {
+                    const changedCell = document.querySelector('.cell.changed');
+                    let changedPos = null;
+                    if (changedCell) {
+                        const rowsArr = Array.from(grid.querySelectorAll('tr'));
+                        const r = rowsArr.indexOf(changedCell.parentElement.parentElement);
+                        const c = Array.from(changedCell.parentElement.parentElement.children).indexOf(changedCell.parentElement);
+                        changedPos = { r, c };
+                    }
+                    stage = 4;
+                    instructionText.textContent = "Person B überprüft jetzt den Code und versucht den eingebauten Fehler zu finden. Wenn Person B glaubt, das fehlerhafte Feld gefunden zu haben, klickt sie darauf um die Lösung zu überprüfen.";
+                    document.querySelectorAll('.cell.changed').forEach(c => c.classList.remove('changed'));
+                    buildStage4(Array.from(grid.querySelectorAll('tr')).map(tr => Array.from(tr.children).map(td => td.firstChild.textContent)), changedPos);
+                }
+            });
+
+            buildStage1();
+        })();
+    </script>
+</body>
+</html>
